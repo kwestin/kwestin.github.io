@@ -8,32 +8,31 @@ document.body.appendChild(renderer.domElement);
 // Set camera position
 camera.position.z = 4;
 
-// Create a function to generate vertices for a 4D tesseract (Hypercube)
+// Generate vertices for a 4D tesseract
 function generateTesseractVertices() {
     const vertices = [];
     for (let i = 0; i < 16; i++) {
         let vertex = [];
         for (let j = 0; j < 4; j++) {
-            vertex.push(((i >> j) & 1) * 2 - 1); // generate values -1 or 1
+            vertex.push(((i >> j) & 1) ? 1 : -1); // Generate coordinates as -1 or 1
         }
         vertices.push(vertex);
     }
     return vertices;
 }
 
-// Create the edges for the tesseract
+// Generate edges by connecting vertices differing by exactly one coordinate
 function generateEdges(vertices) {
     const edges = [];
     for (let i = 0; i < vertices.length; i++) {
         for (let j = i + 1; j < vertices.length; j++) {
-            // Only connect points differing in one dimension
             let diffCount = 0;
             for (let k = 0; k < 4; k++) {
                 if (vertices[i][k] !== vertices[j][k]) {
                     diffCount++;
                 }
             }
-            if (diffCount === 1) {
+            if (diffCount === 1) {  // Only connect vertices differing in one coordinate
                 edges.push([vertices[i], vertices[j]]);
             }
         }
@@ -41,42 +40,33 @@ function generateEdges(vertices) {
     return edges;
 }
 
-// Function to rotate and project 4D vertices to 3D space
-function project4Dto3D(vertex, rotationMatrix) {
-    // Apply 4D rotation matrix
-    let rotated = vertex.map((coord, idx) => {
-        return rotationMatrix[idx].reduce((sum, val, i) => sum + val * vertex[i], 0);
-    });
-    
-    // Now project onto 3D space (simple 3D projection)
-    return {
-        x: rotated[0] / (rotated[3] + 4), // 4D to 3D perspective projection
-        y: rotated[1] / (rotated[3] + 4),
-        z: rotated[2] / (rotated[3] + 4)
-    };
+// Project 4D vertices into 3D space using perspective projection
+function project4Dto3D(vertex) {
+    const w = vertex[3] + 4; // Apply a simple perspective division to simulate depth
+    return new THREE.Vector3(vertex[0] / w, vertex[1] / w, vertex[2] / w);
 }
 
-// Create tesseract mesh
-function createTesseract() {
-    const vertices = generateTesseractVertices();
-    const edges = generateEdges(vertices);
-    
+// Create lines (edges) for the tesseract
+function createTesseractLines(vertices, edges) {
     const material = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+    const geometry = new THREE.BufferGeometry();
 
     edges.forEach(edge => {
-        const geometry = new THREE.BufferGeometry().setFromPoints([
-            new THREE.Vector3(edge[0][0], edge[0][1], edge[0][2]),
-            new THREE.Vector3(edge[1][0], edge[1][1], edge[1][2])
-        ]);
+        const v1 = project4Dto3D(edge[0]);
+        const v2 = project4Dto3D(edge[1]);
+
+        geometry.setFromPoints([v1, v2]);
         const line = new THREE.Line(geometry, material);
         scene.add(line);
     });
 }
 
-// Initialize the tesseract
-createTesseract();
+// Set up the tesseract and its edges
+let vertices = generateTesseractVertices();
+let edges = generateEdges(vertices);
+createTesseractLines(vertices, edges);
 
-// Rotation and morphing controls
+// Define a 4D rotation matrix
 let rotationMatrix = [
     [Math.cos(0.01), -Math.sin(0.01), 0, 0],
     [Math.sin(0.01), Math.cos(0.01), 0, 0],
@@ -84,21 +74,37 @@ let rotationMatrix = [
     [0, 0, Math.sin(0.01), Math.cos(0.01)]
 ];
 
-// Animating the scene
+// Function to rotate the vertices in 4D space
+function rotateVertices(vertices, matrix) {
+    return vertices.map(vertex => {
+        return vertex.map((coord, idx) => {
+            return matrix[idx].reduce((sum, val, i) => sum + val * vertex[i], 0);
+        });
+    });
+}
+
+// Animate the scene and rotate the tesseract
 function animate() {
     requestAnimationFrame(animate);
 
+    // Clear the scene for each frame
     scene.clear();
-    createTesseract(); // Recreate the tesseract with updated rotations
 
-    // Rotate the tesseract each frame
-    rotationMatrix[0][0] += 0.001; // Apply slight changes for morphing
+    // Apply the 4D rotation matrix to the vertices
+    vertices = rotateVertices(vertices, rotationMatrix);
+    edges = generateEdges(vertices); // Regenerate the edges after rotation
+
+    // Recreate the lines with the rotated vertices
+    createTesseractLines(vertices, edges);
+
+    // Rotate the 4D rotation matrix slightly to "morph" the tesseract
+    rotationMatrix[0][0] += 0.001;
     rotationMatrix[1][1] += 0.001;
-    rotationMatrix[2][2] += 0.001;
 
     renderer.render(scene, camera);
 }
 
+// Start the animation loop
 animate();
 
 // Handle window resizing
